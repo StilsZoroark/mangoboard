@@ -2,11 +2,32 @@
 import { Article } from "@app/types/index";
 import { NewsCard } from "@app/components/NewsCard";
 import { fetchNews } from "./lib/fetchNews";
+import { fetchMarketIndices } from "./lib/fetchIndices";
+import IndicesTicker from "@app/components/IndicesTicker";
 
 export default async function HomePage() {
 
-  const articles = await fetchNews();
+  
+
+
+
+
+
+
+
+
+
+
+  const [indicesResult, articles] = await Promise.all([
+    fetchMarketIndices(),
+    fetchNews()
+  ]);
   //await Promise.reject(new Error("Simulated data fetch failure"));
+
+  //log partial failures server side
+  if(indicesResult.errors.length >0){
+    console.warn("Indices partial failure:", indicesResult.errors);
+  }
 
   //if the api response is empty
   if(articles.length === 0) return null;
@@ -27,8 +48,14 @@ export default async function HomePage() {
   return (
     <main className="min-h-screen bg-yellow-50 py-8 px-4 sm:px-6 lg:px-8">
       <p className="text-2xl font-bold text-orange-600">Mangoboard</p>
-      <div className="mx-auto max-w-7xl">
-        
+      
+      <div className="mx-auto max-w-7xl mb-6">
+        <IndicesTicker 
+        indices={indicesResult.indices}
+        fetchedAt={indicesResult.fetchedAt}
+        />
+        </div>
+        <div className="mx-auto max-w-7xl">
         {/* Centered Heading */}
         <section className="mb-10 text-center">
           <div className="inline-block bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-1 rounded-full mb-4 uppercase tracking-wider">
@@ -53,7 +80,7 @@ export default async function HomePage() {
 
         {/* Responsive Card Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {articles.map((article) => (
+          {remainingArticles.map((article) => (
             <NewsCard key={article.id} article={article} />
           ))}
         </div>
