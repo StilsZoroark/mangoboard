@@ -1,6 +1,8 @@
 import { Article } from "@app/types";
 import Parser from "rss-parser";
 
+const ARTICLES_PER_SOURCE = 5;
+
 const FEEDS = [
   //{ url: "https://timesofindia.indiatimes.com/rssfeedstopstories.cms", source: "Times of India" },
   { url: "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms", source: "Economic Times" },
@@ -49,7 +51,14 @@ export async function fetchNews(): Promise<Article[]> {
     FEEDS.map(async ({url, source}) => {
         try{
         const feed = await parser.parseURL(url);
-    return feed.items.map((item) => ({
+    return feed.items
+        .sort(
+          (a, b) =>
+            new Date(b.isoDate || b.pubDate || 0).getTime() -
+            new Date(a.isoDate || a.pubDate || 0).getTime()
+        )
+        .slice(0, ARTICLES_PER_SOURCE)
+        .map((item) => ({
         id: item.guid || item.link || `${source}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         title:item.title || "Untitled Story",
         url: item.link || '#',

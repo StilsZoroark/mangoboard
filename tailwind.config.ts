@@ -21,9 +21,14 @@ const config: Config = {
           '0%': { transform: 'translateX(0%)' },
           '100%': { transform: 'translateX(-50%)' },
         },
+        dropIn: {
+          from: {opacity: "0", transform: "scale(0.94) translateY(-6px)" },
+          to: { opacity: "1", transform: "scale(1) translateY(0)"}
+        },
       },
     },
   },
+  
   plugins: [],
 };
 

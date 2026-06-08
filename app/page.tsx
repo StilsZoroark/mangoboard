@@ -4,6 +4,13 @@ import { NewsCard } from "@app/components/NewsCard";
 import { fetchNews } from "./lib/fetchNews";
 import { fetchMarketIndices } from "./lib/fetchIndices";
 import IndicesTicker from "@app/components/IndicesTicker";
+import { classifyBusiness } from '@app/lib/classifiers/business-classifier';
+import { keywordClassifier } from '@app/lib/classifiers/keyword-classifier';
+import DashboardMenu from "@app/components/DashboardMenu";
+import { mistralClassifier, batchClassify } from "@app/lib/classifiers/AI-classifier";
+import { preFilter } from "@app/lib/classifiers/Prefilter";
+
+const DISPLAY_LIMIT = 15;
 
 export default async function HomePage() {
 
@@ -22,21 +29,59 @@ export default async function HomePage() {
     fetchMarketIndices(),
     fetchNews()
   ]);
+  
   //await Promise.reject(new Error("Simulated data fetch failure"));
 
+  const preFiltered = preFilter(articles);
+  console.log(`Pre-filtered: ${articles.length} -> ${preFiltered.length} articles`);
+
+  const classifications = await batchClassify(preFiltered, mistralClassifier, 5, 1000);
+
+  const businessArticles: Article[] = preFiltered.filter((article, i) => {
+    const classification = classifications[i];
+    if(!classification.isBusiness){
+      console.log(`🚫 Filtered: "${article.title}" → ${classification.vetoReason || 'low confidence'}`)
+    }
+    return classification.isBusiness && classification.confidence >=60;
+  });
+
+  /*//async added just for the current moment
+  const businessArticles = articles.filter(async article => {
+    //replacing the keyword classifier with the AI classifier
+    //const classification = keywordClassifier.classify(article);
+    const classification = await mistralClassifier.classify(article);
+
+    if(!classification.isBusiness){
+      console.log(`Filtered: "${article.title}" -> ${classification.vetoReason || 'low confidence'}`);
+    }
+    return classification.isBusiness;
+  });*/
+
+  //log filter stats
+  console.log(`Filter stats: ${articles.length} raw -> ${preFiltered.length} pre-filtered -> ${businessArticles.length} business`);
   //log partial failures server side
   if(indicesResult.errors.length >0){
     console.warn("Indices partial failure:", indicesResult.errors);
   }
 
   //if the api response is empty
-  if(articles.length === 0) return null;
+  if(businessArticles.length === 0) {
+    return(
+      <main className="min-h-screen flex flex-col items-center justify-center bg-yellow-50 px-4">
+        <p className="text-lg font-medium text-slate-700">No business articles matched our filter.</p>
+        <p className="text-sm text-slate-500 mt-2">Refreshing feeds shortly...</p>
+      </main>
+    );
+  }
+  const rankedArticles = businessArticles
+    .sort(
+      (a, b) =>
+        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+    )
+    .slice(0, DISPLAY_LIMIT);
 
-  const topArticle = articles.reduce((latest, current) =>{
-    return new Date(current.publishedAt) > new Date(latest.publishedAt) ? current : latest;
-  }, articles[0]);
-
-  const remainingArticles = articles.filter((a)=> a.id!==topArticle.id);
+  const topArticle = rankedArticles[0];
+  const remainingArticles = rankedArticles.slice(1);
 
   const headlineTime = new Date(topArticle.publishedAt).toLocaleString("en-IN", {
     day: "numeric",
@@ -47,7 +92,11 @@ export default async function HomePage() {
 
   return (
     <main className="min-h-screen bg-yellow-50 py-8 px-4 sm:px-6 lg:px-8">
-      <p className="text-2xl font-bold text-orange-600">Mangoboard</p>
+      <div className="mx-auto max-w-7xl flex items-center justify-between mb-6">
+        <p className="text-2xl font-bold text-orange-600">Mangoboard</p>
+        <DashboardMenu />
+      </div>
+      
       
       <div className="mx-auto max-w-7xl mb-6">
         <IndicesTicker 
