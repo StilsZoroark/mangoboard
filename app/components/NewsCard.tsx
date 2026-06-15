@@ -24,14 +24,14 @@ export function NewsCard({ article }: { article: Article }) {
       className="
         group relative block h-full overflow-hidden rounded-2xl p-4
         border border-orange-300/35 dark:border-orange-400/20
-        bg-orange-50/25 dark:bg-orange-950/20
-        backdrop-blur-xl backdrop-saturate-200
-        shadow-[inset_0_1px_0_rgba(255,230,140,0.4),0_4px_20px_rgba(200,90,0,0.1)]
+        bg-[#fffaf0] dark:bg-[#150b0a]
+        shadow-[inset_0_1px_0_rgba(255,230,140,0.4),0_4px_20px_rgba(200,90,0,0.06)]
         ring-1 ring-inset ring-amber-200/35 dark:ring-amber-500/10
-        hover:bg-orange-500/15 hover:border-orange-300/50
-        hover:shadow-[inset_0_1px_0_rgba(255,230,140,0.55),0_8px_28px_rgba(200,90,0,0.18)]
-        hover:-translate-y-0.5 active:translate-y-0
-        transition-all duration-150
+        hover:bg-[#ffebd6] dark:hover:bg-[#22120f]
+        hover:border-orange-300/50
+        hover:shadow-[inset_0_1px_0_rgba(255,230,140,0.55),0_8px_24px_rgba(200,90,0,0.12)]
+        hover:-translate-y-0.5 transform-gpu active:translate-y-0
+        transition-[transform,background-color,border-color,box-shadow] duration-150 ease-out
       "
     >
       <div
@@ -43,22 +43,22 @@ export function NewsCard({ article }: { article: Article }) {
       />
 
       <div className="relative flex justify-between items-start mb-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-orange-800 dark:text-orange-300">
+        <span className="text-xs font-semibold uppercase tracking-wide text-black dark:text-white">
           {article.source}
         </span>
         <time
-          className="text-xs text-orange-900/60 dark:text-orange-200/60"
+          className="text-xs text-black/60 dark:text-white/60"
           dateTime={article.publishedAt}
         >
           {formattedDate}
         </time>
       </div>
 
-      <h2 className="relative text-base font-semibold text-orange-950 dark:text-orange-50 mb-3 line-clamp-2 group-hover:text-orange-700 dark:group-hover:text-orange-200 transition-colors">
+      <h2 className="relative text-base font-semibold text-orange-800 dark:text-orange-400 mb-3 line-clamp-2 group-hover:text-orange-600 dark:group-hover:text-orange-300 transition-colors">
         {article.title}
       </h2>
 
-      <span className="relative inline-block bg-orange-400/15 border border-orange-300/30 text-orange-900 dark:text-orange-200 text-xs px-2 py-0.5 rounded-full">
+      <span className="relative inline-block bg-orange-400/15 border border-orange-300/30 text-black dark:text-white text-xs px-2 py-0.5 rounded-full">
         {article.category}
       </span>
     </a>

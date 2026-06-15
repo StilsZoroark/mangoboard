@@ -31,7 +31,7 @@ interface RssItem {
 
  //  Type the parser itself using generics
 // <{}, RssItem> means: use default feed shape, but type items as RssItem
-  const parser = new Parser<{}, RssItem>(
+  const parser = new Parser<Record<string, never>, RssItem>(
     {
         headers:{
             "User-Agent" : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",

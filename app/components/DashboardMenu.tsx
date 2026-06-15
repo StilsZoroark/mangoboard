@@ -2,10 +2,31 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { signOut } from 'next-auth/react';
+import type { Session } from 'next-auth';
 
-export default function DashboardMenu() {
+export default function DashboardMenu({ session }: { session?: Session | null }) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  useEffect(() => {
+    const isDark = document.documentElement.classList.contains('dark');
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTheme(isDark ? 'dark' : 'light');
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    localStorage.setItem('theme', nextTheme);
+    if (nextTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -40,7 +61,7 @@ export default function DashboardMenu() {
           border border-orange-300/50 dark:border-orange-500/30
           bg-orange-500/10 dark:bg-orange-500/10
           backdrop-blur-md
-         text-orange-950 dark:text-black
+          text-orange-950 dark:text-orange-100
           shadow-[inset_0_1px_0_rgba(255,230,140,0.45),0_2px_8px_rgba(200,90,0,0.12)]
           hover:bg-orange-500/20
           hover:shadow-[inset_0_1px_0_rgba(255,230,140,0.55),0_4px_16px_rgba(200,90,0,0.2)]
@@ -52,8 +73,18 @@ export default function DashboardMenu() {
           before:rounded-t-full before:pointer-events-none
         "
       >
-        <span className="text-base leading-none">☰</span>
-        <span className="hidden sm:inline">Menu</span>
+        {session?.user?.image ? (
+          <img
+            src={session.user.image}
+            alt={session.user.name || "User avatar"}
+            className="w-5 h-5 rounded-full object-cover border border-orange-300/30"
+          />
+        ) : (
+          <span className="text-base leading-none">☰</span>
+        )}
+        <span className="hidden sm:inline truncate max-w-[80px]">
+          {session?.user?.name ? session.user.name.split(" ")[0] : "Menu"}
+        </span>
       </button>
 
       {/* Dropdown panel */}
@@ -64,8 +95,7 @@ export default function DashboardMenu() {
             absolute right-0 top-[calc(100%+8px)] z-50 w-56
             rounded-2xl overflow-hidden
             border border-orange-300/35 dark:border-orange-400/20
-            bg-orange-50/20 dark:bg-orange-950/20
-            backdrop-blur-2xl backdrop-saturate-200
+            bg-orange-50 dark:bg-zinc-900
             shadow-[0_8px_32px_rgba(200,90,0,0.15),0_2px_8px_rgba(200,90,0,0.08)]
             ring-1 ring-inset ring-amber-200/40 dark:ring-amber-500/10
             animate-[dropIn_0.18s_cubic-bezier(0.22,1,0.36,1)]
@@ -82,15 +112,30 @@ export default function DashboardMenu() {
 
           {/* Account */}
           <MenuSection label="Account">
-            <MenuItem
-              icon="👤"
-              onClick={() => {
-                console.log('Sign in clicked');
-                setIsOpen(false);
-              }}
-            >
-              Sign in <span className="ml-auto opacity-40 text-xs">→</span>
-            </MenuItem>
+            {session?.user ? (
+              <>
+                <div className="px-2.5 py-1.5 text-xs text-orange-950/60 dark:text-orange-200/60 truncate max-w-full">
+                  Signed in as <strong className="block text-orange-950 dark:text-white truncate">{session.user.email}</strong>
+                </div>
+                <MenuItem
+                  icon="🚪"
+                  onClick={() => {
+                    signOut({ callbackUrl: "/" });
+                    setIsOpen(false);
+                  }}
+                >
+                  Sign out
+                </MenuItem>
+              </>
+            ) : (
+              <MenuItem
+                icon="👤"
+                href="/login"
+                onClick={() => setIsOpen(false)}
+              >
+                Sign in <span className="ml-auto opacity-40 text-xs">→</span>
+              </MenuItem>
+            )}
           </MenuSection>
 
           {/* Dashboards */}
@@ -103,6 +148,16 @@ export default function DashboardMenu() {
             </MenuItem>
             <MenuItem icon="🏛️" disabled>
               Politics <MenuBadge>soon</MenuBadge>
+            </MenuItem>
+          </MenuSection>
+
+          {/* Preferences */}
+          <MenuSection label="Preferences">
+            <MenuItem
+              icon={theme === 'dark' ? '☀️' : '🌙'}
+              onClick={toggleTheme}
+            >
+              {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
             </MenuItem>
           </MenuSection>
 
