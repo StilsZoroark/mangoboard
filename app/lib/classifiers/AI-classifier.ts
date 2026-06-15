@@ -3,6 +3,23 @@
 import {Mistral} from '@mistralai/mistralai';
 import type { ArticleClassifier, BusinessClassification } from '@app/lib/classifiers/types';
 import type { Article } from '@app/types';
+import crypto from "crypto";
+import { sql } from "../db";
+
+// Use globalThis to persist the cache Map during development hot-reloading
+const globalForCache = globalThis as unknown as {
+  classificationCache: Map<string, BusinessClassification>;
+};
+
+if (!globalForCache.classificationCache) {
+  globalForCache.classificationCache = new Map();
+}
+
+const classificationCache = globalForCache.classificationCache;
+
+function getTitleHash(title: string): string {
+  return crypto.createHash("sha256").update(title.toLowerCase().trim()).digest("hex");
+}
 
 // ============================================================
 // 🌼 SECTION 1 — Client Setup
@@ -96,6 +113,55 @@ export class MistralClassifier implements ArticleClassifier {
   version = 'mistral-small-v1';
 
   async classify(article: Article): Promise<BusinessClassification> {
+    const hash = getTitleHash(article.title);
+
+    // 1. Check in-memory cache
+    if (classificationCache.has(hash)) {
+      const cached = classificationCache.get(hash)!;
+      return {
+        ...cached,
+        metadata: {
+          ...cached.metadata,
+          cached: true,
+          source: "memory",
+        },
+      };
+    }
+
+    // 2. Check Supabase database cache if connected
+    if (sql) {
+      try {
+        const cachedResults = await sql`
+          SELECT is_business as "isBusiness", confidence, matched_signals as "matchedSignals", veto_reason as "vetoReason"
+          FROM classification_cache
+          WHERE title_hash = ${hash}
+          LIMIT 1
+        `;
+
+        if (cachedResults.length > 0) {
+          const cached = cachedResults[0];
+          const result: BusinessClassification = {
+            isBusiness: cached.isBusiness,
+            confidence: cached.confidence,
+            matchedSignals: cached.matchedSignals || [],
+            vetoReason: cached.vetoReason || undefined,
+            metadata: {
+              model: 'mistral-small-latest',
+              classifierVersion: this.version,
+              scoredAt: new Date().toISOString(),
+              cached: true,
+              source: "database",
+            },
+          };
+          classificationCache.set(hash, result);
+          return result;
+        }
+      } catch (err) {
+        console.warn(`[Cache] Database read failed for "${article.title}":`, err);
+      }
+    }
+
+    // 3. Query Mistral API
     try {
       const response = await mistral.chat.complete({
         model: 'mistral-small-latest',
@@ -105,15 +171,10 @@ export class MistralClassifier implements ArticleClassifier {
             content: buildPrompt(article),
           }
         ],
-        // temperature 0 = deterministic, consistent JSON output every time
-        // higher temperature = more creative but less reliable structure
         temperature: 0,
-        // max_tokens 256 is plenty for a small JSON object
-        // keeping it low saves free tier quota
         maxTokens: 256,
       });
 
-      // Extract the text content from Mistral's response structure
       const raw = response.choices?.[0]?.message?.content;
 
       if (!raw || typeof raw !== 'string') {
@@ -121,17 +182,28 @@ export class MistralClassifier implements ArticleClassifier {
       }
 
       const result = parseResponse(raw);
-
-      return {
+      const finalResult: BusinessClassification = {
         ...result,
-        // metadata carries model-level info — useful for debugging
-        // and fits perfectly into your metadata?: Record<string, unknown>
         metadata: {
           model: 'mistral-small-latest',
           classifierVersion: this.version,
           scoredAt: new Date().toISOString(),
         },
       };
+
+      // 4. Save to caches
+      classificationCache.set(hash, finalResult);
+      if (sql) {
+        sql`
+          INSERT INTO classification_cache (title_hash, title, is_business, confidence, matched_signals, veto_reason)
+          VALUES (${hash}, ${article.title}, ${finalResult.isBusiness}, ${finalResult.confidence}, ${finalResult.matchedSignals}, ${finalResult.vetoReason || null})
+          ON CONFLICT (title_hash) DO NOTHING
+        `.catch(err => {
+          console.warn(`[Cache] Database write failed for "${article.title}":`, err);
+        });
+      }
+
+      return finalResult;
 
     } catch (error) {
       // ============================================================
@@ -213,3 +285,67 @@ export async function batchClassify(
 
 // Export a singleton instance so the whole app shares one client
 export const mistralClassifier = new MistralClassifier();
+
+export interface SentimentSelection {
+  positiveArticleId: string | null;
+  negativeArticleId: string | null;
+}
+
+export async function selectSentimentArticles(articles: Article[]): Promise<SentimentSelection> {
+  if (articles.length === 0) {
+    return { positiveArticleId: null, negativeArticleId: null };
+  }
+
+  const prompt = `
+You are a financial news analyst. Given the following list of business news articles, select:
+1. The most positive/bullish article (highest positive sentiment or positive market/economic news).
+2. The most negative/bearish article (highest negative sentiment or negative market/economic news).
+
+Articles:
+${articles.map((art, idx) => `[ID: ${art.id}] Index ${idx}: ${art.title} (Source: ${art.source})`).join('\n')}
+
+Return ONLY a valid JSON object with the following schema, with no explanation, markdown code blocks, or backticks:
+{
+  "positiveArticleId": "ID of the selected positive article (or null if none fit)",
+  "negativeArticleId": "ID of the selected negative article (or null if none fit)"
+}
+`.trim();
+
+  let raw = "";
+  try {
+    const response = await mistral.chat.complete({
+      model: 'mistral-small-latest',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0,
+      maxTokens: 512,
+    });
+
+    const content = response.choices?.[0]?.message?.content;
+    if (typeof content !== 'string') {
+      throw new Error('Empty or invalid response from Mistral');
+    }
+    raw = content;
+
+    const cleaned = raw
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/```$/i, '')
+      .trim();
+
+    const parsed = JSON.parse(cleaned);
+    
+    console.log('[selectSentimentArticles] Mistral selected:', parsed);
+
+    return {
+      positiveArticleId: typeof parsed.positiveArticleId === 'string' ? parsed.positiveArticleId : null,
+      negativeArticleId: typeof parsed.negativeArticleId === 'string' ? parsed.negativeArticleId : null,
+    };
+  } catch (error) {
+    console.warn('[selectSentimentArticles] Failed to select sentiment articles:', error, 'Raw output was:', raw);
+    // Graceful fallback: pick the first and second articles if AI selection fails
+    return {
+      positiveArticleId: articles[0]?.id || null,
+      negativeArticleId: articles[1]?.id || null,
+    };
+  }
+}
