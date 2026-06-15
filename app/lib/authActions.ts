@@ -8,7 +8,7 @@ import { AuthError } from "next-auth";
 export async function loginWithCredentials(prevState: string | undefined, formData: FormData) {
   const emailOrPhone = formData.get("emailOrPhone") as string;
   const password = formData.get("password") as string;
-
+  //a more sophisticated logic must replace this
   if (!emailOrPhone || !password) {
     return "Please enter your email/phone and password.";
   }
