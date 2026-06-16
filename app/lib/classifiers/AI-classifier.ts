@@ -194,13 +194,15 @@ export class MistralClassifier implements ArticleClassifier {
       // 4. Save to caches
       classificationCache.set(hash, finalResult);
       if (sql) {
-        sql`
-          INSERT INTO classification_cache (title_hash, title, is_business, confidence, matched_signals, veto_reason)
-          VALUES (${hash}, ${article.title}, ${finalResult.isBusiness}, ${finalResult.confidence}, ${finalResult.matchedSignals}, ${finalResult.vetoReason || null})
-          ON CONFLICT (title_hash) DO NOTHING
-        `.catch(err => {
+        try {
+          await sql`
+            INSERT INTO classification_cache (title_hash, title, is_business, confidence, matched_signals, veto_reason)
+            VALUES (${hash}, ${article.title}, ${finalResult.isBusiness}, ${finalResult.confidence}, ${finalResult.matchedSignals}, ${finalResult.vetoReason || null})
+            ON CONFLICT (title_hash) DO NOTHING
+          `;
+        } catch (err) {
           console.warn(`[Cache] Database write failed for "${article.title}":`, err);
-        });
+        }
       }
 
       return finalResult;
