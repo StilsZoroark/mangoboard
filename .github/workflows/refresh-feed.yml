@@ -1,0 +1,15 @@
+name: Refresh Feed Cache
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # Every 5 minutes
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Cache Warming Endpoint
+        run: |
+          curl -s -X GET "${{ secrets.SITE_URL }}/api/cron/refresh-feed" \
+          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
